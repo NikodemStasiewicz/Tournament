@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import { prisma } from "@/app/lib/prisma";
+import { JWT_SECRET } from "@/app/lib/env";
 
 export async function GET() {
   const cookieStore = await cookies(); // ⬅️ poprawka
@@ -11,12 +12,21 @@ export async function GET() {
   }
 
   try {
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & { id: string; email: string };
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        role: true,
+        createdAt: true
+      }
     });
     return Response.json({ user });
   } catch (err) {
+    console.error("JWT verification failed in /api/auth/me:", err);
     return Response.json({ user: null });
   }
 }

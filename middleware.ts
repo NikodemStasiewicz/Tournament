@@ -45,6 +45,7 @@ export const config = {
     '/tournaments/new',
     '/tournaments/:id/edit',
     '/tournaments',
+    '/portfolio',
     
   ],
 };

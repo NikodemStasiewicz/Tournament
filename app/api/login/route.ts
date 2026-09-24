@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "@/app/lib/prisma";
+import { JWT_SECRET } from "@/app/lib/env";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json();
@@ -17,10 +18,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Nieprawidłowe dane logowania" }, { status: 401 });
   }
 
-  // Dodajemy `id` do payloadu
+  // Create JWT token with validated secret
   const token = jwt.sign(
     { id: user.id, email: user.email },
-    process.env.JWT_SECRET!,
+    JWT_SECRET,
     { expiresIn: "7d" }
   );
 

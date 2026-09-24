@@ -1,5 +1,11 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextRequest } from "next/server";
+import { successResponse, badRequestResponse } from "@/app/lib/api-response";
+import { withErrorHandler } from "@/app/lib/error-handler";
+
+interface Params {
+  params: Promise<{ id: string }>;
+}
 
 /**
  * Supports two flows:
@@ -7,8 +13,9 @@ import { NextRequest } from "next/server";
  * - Team/participant-based matches: body = { participantId: string }. Uses MatchParticipant records (userId or teamId) and sets isWinner flag.
  *   Propagates winner/loser to configured next matches by creating MatchParticipant entries in the target slot when empty.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const matchId = params.id;
+export const POST = withErrorHandler(async (req: NextRequest, context: Params) => {
+  const { params } = context;
+  const { id: matchId } = await params;
   const body = await req.json().catch(() => ({} as any));
   const { winnerId, participantId } = body ?? {};
 
@@ -22,24 +29,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
 
   if (!match) {
-    return new Response("Invalid match", { status: 400 });
+    return badRequestResponse("Invalid match");
   }
 
   // If participant-based (teams or mixed)
   if (participantId || (match.participants && match.participants.length > 0)) {
     const winnerPId = String(participantId || "");
     if (!winnerPId) {
-      return new Response("Missing participantId", { status: 400 });
+      return badRequestResponse("Missing participantId");
     }
 
     const participants = match.participants;
     if (participants.length === 0) {
-      return new Response("Match has no participants", { status: 400 });
+      return badRequestResponse("Match has no participants");
     }
 
     const winnerP = participants.find((p) => p.id === winnerPId);
     if (!winnerP) {
-      return new Response("Participant does not belong to this match", { status: 400 });
+      return badRequestResponse("Participant does not belong to this match");
     }
 
     const loserP = participants.find((p) => p.slot !== winnerP.slot) || null;
@@ -96,19 +103,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     }
 
-    return new Response("Match result saved (participant mode)", { status: 200 });
+    return successResponse(null, "Match result saved (participant mode)");
   }
 
   // Legacy SOLO flow (player1Id/player2Id and winnerId on Match)
   if (!winnerId) {
-    return new Response("Missing winnerId", { status: 400 });
+    return badRequestResponse("Missing winnerId");
   }
 
   const player1Id = match.player1Id;
   const player2Id = match.player2Id;
 
   if (![player1Id, player2Id].includes(winnerId)) {
-    return new Response("Winner must be one of the players in the match", { status: 400 });
+    return badRequestResponse("Winner must be one of the players in the match");
   }
 
   const loserId = winnerId === player1Id ? player2Id : player1Id;
@@ -159,5 +166,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  return new Response("Match result saved", { status: 200 });
-}
+  return successResponse(null, "Match result saved");
+});

@@ -1,46 +1,52 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getCurrentUser } from "@/app/lib/auth";
 import { createParticipantBracketInDb } from "@/app/lib/createBracketInDb";
+import { successResponse, unauthorizedResponse, badRequestResponse, notFoundResponse, forbiddenResponse } from "@/app/lib/api-response";
+import { withErrorHandler } from "@/app/lib/error-handler";
+
+interface Params {
+  params: Promise<{ id: string }>;
+}
 
 // POST /api/tournaments/[id]/join-team
 // Body: { teamId: string }
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const user = await getCurrentUser();
-    if (!user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const POST = withErrorHandler(async (request: NextRequest, context: Params) => {
+  const user = await getCurrentUser();
+  if (!user?.id) {
+    return unauthorizedResponse();
+  }
 
-    const tournamentId = params.id;
+  const { params } = context;
+  const { id: tournamentId } = await params;
     const body = await request.json();
     const teamId = String(body?.teamId || "");
 
-    if (!tournamentId || !teamId) {
-      return NextResponse.json({ error: "Brak danych: tournamentId/teamId" }, { status: 400 });
-    }
+  if (!tournamentId || !teamId) {
+    return badRequestResponse("Brak danych: tournamentId/teamId");
+  }
 
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-      select: {
-        id: true,
-        participantLimit: true,
-        tournamentType: true,
-        teamSize: true,
-        minTeamSize: true,
-        maxTeamSize: true,
-        format: true,
-      },
-    });
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: {
+      id: true,
+      participantLimit: true,
+      tournamentType: true,
+      teamSize: true,
+      minTeamSize: true,
+      maxTeamSize: true,
+      format: true,
+    },
+  });
 
-    if (!tournament) {
-      return NextResponse.json({ error: "Turniej nie istnieje" }, { status: 404 });
-    }
+  if (!tournament) {
+    return notFoundResponse("Turniej nie istnieje");
+  }
 
-    const type = tournament.tournamentType || "MIXED";
-    if (type === "SOLO_ONLY") {
-      return NextResponse.json({ error: "Ten turniej przyjmuje tylko graczy solo" }, { status: 400 });
-    }
+  const type = tournament.tournamentType || "MIXED";
+  if (type === "SOLO_ONLY") {
+    return badRequestResponse("Ten turniej przyjmuje tylko graczy solo");
+  }
 
     // Sprawdź czy user ma uprawnienia w teamie (OWNER/CAPTAIN)
     const membership = await prisma.teamMember.findFirst({
@@ -51,46 +57,46 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       select: { teamRole: true },
     });
 
-    if (!membership || !["OWNER", "CAPTAIN"].includes(membership.teamRole as any)) {
-      return NextResponse.json({ error: "Brak uprawnień do reprezentowania tego zespołu" }, { status: 403 });
-    }
+  if (!membership || !["OWNER", "CAPTAIN"].includes(membership.teamRole as any)) {
+    return forbiddenResponse("Brak uprawnień do reprezentowania tego zespołu");
+  }
 
-    // Sprawdź rozmiar zespołu vs wymagania turnieju
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-      include: { _count: { select: { members: true } } },
-    });
-    if (!team) {
-      return NextResponse.json({ error: "Zespół nie istnieje" }, { status: 404 });
-    }
+  // Sprawdź rozmiar zespołu vs wymagania turnieju
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: { _count: { select: { members: true } } },
+  });
+  if (!team) {
+    return notFoundResponse("Zespół nie istnieje");
+  }
 
-    const size = team._count.members;
-    if (typeof tournament.teamSize === "number") {
-      if (size !== tournament.teamSize) {
-        return NextResponse.json({ error: `Wymagany rozmiar zespołu: ${tournament.teamSize}` }, { status: 400 });
-      }
-    } else {
-      if (typeof tournament.minTeamSize === "number" && size < tournament.minTeamSize) {
-        return NextResponse.json({ error: `Minimalny rozmiar zespołu: ${tournament.minTeamSize}` }, { status: 400 });
-      }
-      if (typeof tournament.maxTeamSize === "number" && size > tournament.maxTeamSize) {
-        return NextResponse.json({ error: `Maksymalny rozmiar zespołu: ${tournament.maxTeamSize}` }, { status: 400 });
-      }
+  const size = team._count.members;
+  if (typeof tournament.teamSize === "number") {
+    if (size !== tournament.teamSize) {
+      return badRequestResponse(`Wymagany rozmiar zespołu: ${tournament.teamSize}`);
     }
+  } else {
+    if (typeof tournament.minTeamSize === "number" && size < tournament.minTeamSize) {
+      return badRequestResponse(`Minimalny rozmiar zespołu: ${tournament.minTeamSize}`);
+    }
+    if (typeof tournament.maxTeamSize === "number" && size > tournament.maxTeamSize) {
+      return badRequestResponse(`Maksymalny rozmiar zespołu: ${tournament.maxTeamSize}`);
+    }
+  }
 
-    // Sprawdź, czy zespół nie jest już zapisany
-    const existing = await prisma.tournamentParticipant.findFirst({
-      where: { tournamentId, teamId },
-    });
-    if (existing) {
-      return NextResponse.json({ error: "Ten zespół jest już zapisany na turniej" }, { status: 400 });
-    }
+  // Sprawdź, czy zespół nie jest już zapisany
+  const existing = await prisma.tournamentParticipant.findFirst({
+    where: { tournamentId, teamId },
+  });
+  if (existing) {
+    return badRequestResponse("Ten zespół jest już zapisany na turniej");
+  }
 
-    // Sprawdź dostępność miejsc
-    const currentCount = await prisma.tournamentParticipant.count({ where: { tournamentId } });
-    if (currentCount >= tournament.participantLimit) {
-      return NextResponse.json({ error: "Turniej jest pełny" }, { status: 400 });
-    }
+  // Sprawdź dostępność miejsc
+  const currentCount = await prisma.tournamentParticipant.count({ where: { tournamentId } });
+  if (currentCount >= tournament.participantLimit) {
+    return badRequestResponse("Turniej jest pełny");
+  }
 
     // Dodaj zespół jako uczestnika
     await prisma.tournamentParticipant.create({
@@ -112,9 +118,5 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       await createParticipantBracketInDb(tournamentId, entries, tournament.format);
     }
 
-    return NextResponse.json({ message: "Zespół dołączył do turnieju." });
-  } catch (error) {
-    console.error("Błąd dołączania zespołu do turnieju:", error);
-    return NextResponse.json({ error: "Błąd serwera" }, { status: 500 });
-  }
-}
+  return successResponse(null, "Zespół dołączył do turnieju.");
+});

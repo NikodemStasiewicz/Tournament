@@ -1,37 +1,35 @@
-  import { NextResponse } from "next/server";
-  import { prisma } from "@/app/lib/prisma";
-  import { createBracketInDb } from "@/app/lib/createBracketInDb";
+import { prisma } from "@/app/lib/prisma";
+import { createBracketInDb } from "@/app/lib/createBracketInDb";
+import { successResponse, notFoundResponse, badRequestResponse } from "@/app/lib/api-response";
+import { withErrorHandler } from "@/app/lib/error-handler";
 
-  export async function POST(
-    req: Request,
-    { params }: { params: { id: string } }
-  ) {
-    const tournamentId = params.id;
+interface Params {
+  params: Promise<{ id: string }>;
+}
 
-    try {
-      const tournament = await prisma.tournament.findUnique({
-        where: { id: tournamentId },
-      });
+export const POST = withErrorHandler(async (req: Request, context: Params) => {
+  const { params } = context;
+  const { id: tournamentId } = await params;
 
-      if (!tournament) {
-        return NextResponse.json({ error: "Turniej nie istnieje." }, { status: 404 });
-      }
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+  });
 
-      const participants = await prisma.tournamentParticipant.findMany({
-        where: { tournamentId },
-      });
-
-      const userIds = participants.map(p => p.userId).filter(Boolean) as string[];
-
-      if (userIds.length < 2) {
-        return NextResponse.json({ error: "Za mało uczestników." }, { status: 400 });
-      }
-
-      await createBracketInDb(tournamentId, userIds, tournament.format);
-
-      return NextResponse.json({ success: true });
-    } catch (error) {
-      console.error("Błąd przy przypisywaniu graczy:", error);
-      return NextResponse.json({ error: "Błąd serwera." }, { status: 500 });
-    }
+  if (!tournament) {
+    return notFoundResponse("Turniej nie istnieje.");
   }
+
+  const participants = await prisma.tournamentParticipant.findMany({
+    where: { tournamentId },
+  });
+
+  const userIds = participants.map(p => p.userId).filter(Boolean) as string[];
+
+  if (userIds.length < 2) {
+    return badRequestResponse("Za mało uczestników.");
+  }
+
+  await createBracketInDb(tournamentId, userIds, tournament.format);
+
+  return successResponse({ success: true }, "Players assigned to matches successfully");
+});

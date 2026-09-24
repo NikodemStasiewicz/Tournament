@@ -1,40 +1,52 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getCurrentUser } from "@/app/lib/auth";
+import { successResponse, unauthorizedResponse, notFoundResponse, forbiddenResponse } from "@/app/lib/api-response";
+import { withErrorHandler } from "@/app/lib/error-handler";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: params.id },
-  });
-
-  if (!tournament) {
-    return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
-  }
-
-  return NextResponse.json(tournament);
+interface Params {
+  params: Promise<{ id: string }>;
 }
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export const GET = withErrorHandler(async (req: Request, context: Params) => {
+  const { params } = context;
+  const { id: tournamentId } = await params;
 
   const tournament = await prisma.tournament.findUnique({
-    where: { id: params.id },
+    where: { id: tournamentId },
   });
 
   if (!tournament) {
-    return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
+    return notFoundResponse("Tournament not found");
+  }
+
+  return successResponse(tournament);
+});
+
+export const PUT = withErrorHandler(async (req: Request, context: Params) => {
+  const { params } = context;
+  const { id: tournamentId } = await params;
+
+  const user = await getCurrentUser();
+  if (!user) {
+    return unauthorizedResponse();
+  }
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+  });
+
+  if (!tournament) {
+    return notFoundResponse("Tournament not found");
   }
 
   if (tournament.ownerId !== user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return forbiddenResponse();
   }
 
   const body = await req.json();
   const updatedTournament = await prisma.tournament.update({
-    where: { id: params.id },
+    where: { id: tournamentId },
     data: {
       name: body.name,
       startDate: body.startDate,
@@ -44,5 +56,5 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     },
   });
 
-  return NextResponse.json(updatedTournament);
-}
+  return successResponse(updatedTournament, "Tournament updated successfully");
+});

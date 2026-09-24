@@ -37,13 +37,16 @@ enum JoinRequestStatus {
 }
 
 model User {
-  id        String    @id @default(auto()) @map("_id") @db.ObjectId
-  email     String    @unique
-  username  String    // usunięte @unique tymczasowo
-  name      String?
-  password  String
-  role      Role      @default(PLAYER)
-  createdAt DateTime  @default(now())
+   id        String    @id @default(auto()) @map("_id") @db.ObjectId
+   email     String    @unique
+   username  String    // usunięte @unique tymczasowo
+   name      String?
+   password  String
+   role      Role      @default(PLAYER)
+   createdAt DateTime  @default(now())
+
+   @@index([role])
+   @@index([createdAt])
 
   // Tournament relationships
   tournaments TournamentParticipant[]
@@ -64,14 +67,17 @@ model User {
 }
 
 model Team {
-  id          String      @id @default(auto()) @map("_id") @db.ObjectId
-  name        String      @unique
-  description String?
-  avatar      String?     // URL do zdjęcia teamu
-  isPublic    Boolean     @default(true)  // czy można przeszukiwać team
-  requireApproval Boolean @default(false) // czy dołączenie wymaga akceptacji
-  maxMembers  Int         @default(5)
-  createdAt   DateTime    @default(now())
+   id          String      @id @default(auto()) @map("_id") @db.ObjectId
+   name        String      @unique
+   description String?
+   avatar      String?     // URL do zdjęcia teamu
+   isPublic    Boolean     @default(true)  // czy można przeszukiwać team
+   requireApproval Boolean @default(false) // czy dołączenie wymaga akceptacji
+   maxMembers  Int         @default(5)
+   createdAt   DateTime    @default(now())
+
+   @@index([isPublic])
+   @@index([createdAt])
   
   // Relationships
   members      TeamMember[]
@@ -114,16 +120,21 @@ model TeamMember {
 }
 
 model Tournament {
-  id               String    @id @default(auto()) @map("_id") @db.ObjectId
-  name             String
-  description      String?
-  format           Format
-  participantLimit Int
-  startDate        DateTime
-  endDate          DateTime
-  registrationEnd  DateTime? // deadline na rejestrację
-  createdAt        DateTime? @default(now())
-  game             String
+   id               String    @id @default(auto()) @map("_id") @db.ObjectId
+   name             String
+   description      String?
+   format           Format
+   participantLimit Int
+   startDate        DateTime
+   endDate          DateTime
+   registrationEnd  DateTime? // deadline na rejestrację
+   createdAt        DateTime? @default(now())
+   game             String
+
+   @@index([startDate])
+   @@index([endDate])
+   @@index([createdAt])
+   @@index([game])
   
   // Tournament type settings
   tournamentType   String    @default("MIXED") // "SOLO_ONLY", "TEAM_ONLY", "MIXED"
@@ -157,13 +168,18 @@ model TournamentParticipant {
 }
 
 model Match {
-  id                        String     @id @default(auto()) @map("_id") @db.ObjectId
-  round                     Int
-  matchNumber               Int?
-  bracket                   BracketType?
-  scheduledAt               DateTime?  // dodane - planowany czas meczu
-  startedAt                 DateTime?  // dodane - rzeczywisty start
-  completedAt               DateTime?  // dodane - zakończenie meczu
+   id                        String     @id @default(auto()) @map("_id") @db.ObjectId
+   round                     Int
+   matchNumber               Int?
+   bracket                   BracketType?
+   scheduledAt               DateTime?  // dodane - planowany czas meczu
+   startedAt                 DateTime?  // dodane - rzeczywisty start
+   completedAt               DateTime?  // dodane - zakończenie meczu
+
+   @@index([tournamentId])
+   @@index([round])
+   @@index([bracket])
+   @@index([scheduledAt])
   
   // Tournament relationship
   tournament                Tournament @relation("tournamentMatches", fields: [tournamentId], references: [id], onDelete: Cascade)
